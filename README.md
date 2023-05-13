@@ -11,11 +11,10 @@ within the room exceeds a pre-determined threshold and will automatically turn o
 
 ## Hardware design and implementation details
 
-menggunakan mikrocontroler arduino uno
-menggunakan sensor DHT11 untuk mengetahui suhu dan kelemababn sekitar
-menggunakan MAX7219 untuk menampilkan hasil sensor yaitu suhu dan kelembaban
-menggunakan servo untuk menandakan kipas sedang berputar
-menggunakan LED untuk menandakan kipas sedang berputar
+Within this circuit, we're using an Arduino Uno as our main microcontroller to run our program
+A DHT11 sensor is used to read the current room temperature and use that information as an input to whether or not turn the fan on.
+Within this circuit, LCD MAX7219 will show the current detected temperature and humidity of the room where the DHT11 sensor is located in.
+Both a servo and an LED will be a signal that the fan is spinning around when the required parameters are met to turn the fan on.
 
 ### Software implementation details
 
