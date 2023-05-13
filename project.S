@@ -20,15 +20,15 @@ RJMP main
 first_condition:
 SBI PORTD, 5
 SBI PORTD, 6
-RJMP agn ; Kembali ke agn
+RJMP continue ; Jump to Continue Label
 second_condition:
 SBI PORTD, 6
 CBI PORTD, 5
-RJMP agn ; Kembali ke agn
+RJMP continue ; Jump to Continue Label
 third_condition:
 CBI PORTD, 6
 CBI PORTD, 5
-RJMP agn ; Kembali ke agn
+RJMP continue ; Jump to Continue Label
 DHT11_sensor:
 ;-----------------------------------------------------------------
 agn:RCALL delay_2s      ;wait 2s for DHT11 to get ready
@@ -62,12 +62,14 @@ w3: SBIC  PIND, 7
     RCALL DHT11_reading ;read temp (3rd byte of 40-bit data)
 
     ;Nilai Temperature disimpan pada R18 dan akan di cek dibagi menjadi tiga kondisi
-    CPI R24, 70
+    CPI R24, 30
     BRSH first_condition ;Branch if same or higher
     CPI R24, 0
     BREQ second_condition; Branch if equal 
-    CPI R24, 5
+    CPI R24, 20
     BRLO third_condition; Branch if lower
+
+    continue:
 
 ;-----------------------------------------------------------------
 ;convert temp & humidity bytes to decimal & display on MAX7219
