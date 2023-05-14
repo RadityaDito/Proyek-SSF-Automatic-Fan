@@ -11,24 +11,36 @@
 ;=================================================================
 
 main:
-SBI PORTD, 4
 RCALL SPI_MAX7219_init
 RCALL MAX7219_disp_text
-RCALL DHT11_sensor
-RJMP main
+RCALL initialize_motor
+loop:
 
-first_condition:
-SBI PORTD, 5
-SBI PORTD, 6
-RJMP continue ; Jump to Continue Label
-second_condition:
-SBI PORTD, 6
+RCALL DHT11_sensor
+; RCALL servo_motor
+
+RJMP loop
+
+first_condition: ;JIka Dingin banget
 CBI PORTD, 5
-RJMP continue ; Jump to Continue Label
-third_condition:
 CBI PORTD, 6
+RCALL turn_off_motor
+SBI PORTD, 4
+
+RJMP continue 
+second_condition: ; Jika Kondisi Cuaca Normal
+CBI PORTD, 6
+SBI PORTD, 5
+; RCALL servo_motor
+CBI PORTD, 4
+RJMP continue 
+third_condition: ;Jika panas banget
+SBI PORTD, 6
 CBI PORTD, 5
-RJMP continue ; Jump to Continue Label
+; RCALL servo_motor
+RCALL turn_on_motor
+CBI PORTD, 4
+RJMP continue 
 DHT11_sensor:
 ;-----------------------------------------------------------------
 agn:RCALL delay_2s      ;wait 2s for DHT11 to get ready
@@ -36,8 +48,12 @@ agn:RCALL delay_2s      ;wait 2s for DHT11 to get ready
 ;start_signal
 ;------------
     ;==LED Set PD5 and PD6 as output
+    SBI DDRD, 4
     SBI DDRD, 5
     SBI DDRD, 6 
+
+    ;Initialize Servo
+    SBI DDRB, 4
     ;==
     
     SBI   DDRD, 7       ;pin PD7 as o/p
@@ -62,15 +78,22 @@ w3: SBIC  PIND, 7
     RCALL DHT11_reading ;read temp (3rd byte of 40-bit data)
 
     ;Nilai Temperature disimpan pada R18 dan akan di cek dibagi menjadi tiga kondisi
-    CPI R24, 30
-    BRSH first_condition ;Branch if same or higher
-    CPI R24, 0
-    BREQ second_condition; Branch if equal 
-    CPI R24, 20
-    BRLO third_condition; Branch if lower
+    ; CPI R24, 30
+    ; BRSH first_condition ;Branch if same or higher
+    ; CPI R24, 0
+    ; BREQ second_condition; Branch if equal 
+    ; CPI R24, 20
+    ; BRLO third_condition; Branch if lower
 
+    ;Branch Proteus
+    CPI R24, 30 ; Kondisi Cuaca Panas
+    BRSH third_condition
+    CPI R24, 25 ; Kondisi Cuaca Normal
+    BRSH second_condition
+    CPI R24, 20 ; Kondisi Cuaca Dingin
+    BRLO first_condition
     continue:
-
+    ; RET
 ;-----------------------------------------------------------------
 ;convert temp & humidity bytes to decimal & display on MAX7219
 ;-------------------------------------------------------------
@@ -86,7 +109,8 @@ w3: SBIC  PIND, 7
     ;-------------------
     RCALL binary2decimal  ;humidity in decimal
     ;-------------------
-    RJMP  agn           ;go back & get another sensor reading
+    ; RJMP  agn           ;go back & get another sensor reading
+    RET
 ;=================================================================
 DHT11_reading:
     LDI   R16, 8        ;set counter for receiving 8 bits
@@ -248,7 +272,4 @@ dsp:  MOV   R18, R27
       ;--------------------------------------------------------
       MOV   R18, R28
       MOV   R17, R30        ;select digit
-      RCALL send_bytes      ;send command & data to MAX7219    
-      ;--------------------------------------------------------
-      RET
-
+      RCALL send_bytes      ;send command & data to MAX7219
