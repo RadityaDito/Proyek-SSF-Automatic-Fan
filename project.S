@@ -11,13 +11,15 @@
 ;=================================================================
 
 main:
+RCALL initialize_motor
+
+loop:
 RCALL SPI_MAX7219_init
 RCALL MAX7219_disp_text
-RCALL initialize_motor
-loop:
-
-RCALL DHT11_sensor
 ; RCALL servo_motor
+RCALL DHT11_sensor
+;RCALL servo_motor
+RCALL HC_SR04_sensor
 
 RJMP loop
 
@@ -28,12 +30,14 @@ RCALL turn_off_motor
 SBI PORTD, 4
 
 RJMP continue 
+
 second_condition: ; Jika Kondisi Cuaca Normal
 CBI PORTD, 6 ; Mematikan LED
 SBI PORTD, 5 ;Menyalakan LED
-; RCALL servo_motor
 CBI PORTD, 4
+RCALL turn_off_motor
 RJMP continue 
+
 third_condition: ;Jika panas banget
 SBI PORTD, 6
 CBI PORTD, 5
@@ -86,11 +90,13 @@ w3: SBIC  PIND, 7
     ; BRLO third_condition; Branch if lower
 
     ;Branch Proteus
-    CPI R24, 30 ; Kondisi Cuaca Panas
+    CPI R24, 30 ; Kondisi Cuaca Panas ; IF > = 30
     BRSH third_condition
-    CPI R24, 25 ; Kondisi Cuaca Normal
+    ; CPI R24, 25 ; Kondisi Cuaca Normal ; IF >= 25
+    ; BRSH second_condition
+    CPI R24, 20
     BRSH second_condition
-    CPI R24, 20 ; Kondisi Cuaca Dingin
+    CPI R24, 20 ; Kondisi Cuaca Dingin : IF < 20
     BRLO first_condition
     continue:
     ; RET
@@ -191,7 +197,7 @@ SPI_MAX7219_init:
       LDI   R17, (1<<MOSI)|(1<<SCK)|(1<<SS)
       OUT   DDRB, R17       ;set MOSI, SCK, SS as o/p
       ;--------------------------------------------------------
-      LDI   R17, (1<<SPE)|(1<<MSTR)|(1<<SPR0)
+      LDI   R17, (1<<SPIE)|(1<<SPE)|(1<<MSTR)|(1<<SPR0)
       OUT   SPCR, R17       ;enable SPI as master, fsck=fosc/16
       ;--------------------------------------------------------
       LDI   R17, 0x0A       ;set segment intensity (0 to 15)
@@ -410,3 +416,94 @@ turn_off_motor:
     SBI PORTD,3
     RET
 ;----------------------------------------------------------------
+;================================================================
+;HCSR04 Code
+;================================================================
+;===============================================================
+;Kode nyalain LED
+;Kondisi Jika jarak kurang dari 20cm
+nyala_led:
+SBIC PORTD, 4
+RCALL turn_off_motor
+RJMP continueH
+RJMP continueH
+
+;kode matiin LED
+matiin_led:
+RCALL turn_off_motor
+RJMP continueH
+
+HC_SR04_sensor:
+;--------------
+    SBI DDRD, 4
+    SBI DDRD, 5
+    SBI DDRD, 6
+    SBI   DDRB, 1         ;pin PB1 as o/p (Trigger)
+    CBI   DDRB, 0         ;pin PB0 as i/p (Echo)
+    ;-----------------------------------------------------------
+    SBI   PORTB, 1
+    RCALL delay_timer0
+    CBI   PORTB, 1        ;send 10us high pulse to sensor
+    ;-----------------------------------------------------------
+    RCALL echo_PW         ;compute Echo pulse width count
+    ;-----------------------------------------------------------
+    RCALL byte2decimal    ;covert & display on MAX7219
+    ;-----------------------------------------------------------
+    RCALL delay_ms
+    RET
+;===============================================================
+echo_PW:
+;-------
+    LDI   R20, 0b00000000
+    STS   TCCR1A, R20     ;Timer 1 normal mode
+    LDI   R20, 0b11000101 ;set for rising edge detection &
+    STS   TCCR1B, R20     ;prescaler=1024, noise cancellation ON
+    ;-----------------------------------------------------------
+lh1: IN    R21, TIFR1
+    SBRS  R21, ICF1
+    RJMP  lh1              ;loop until rising edge is detected
+    ;-----------------------------------------------------------
+    LDS   R16, ICR1L      ;store count value at rising edge
+    ;-----------------------------------------------------------
+    OUT   TIFR1, R21      ;clear flag for falling edge detection
+    LDI   R20, 0b10000101
+    STS   TCCR1B, R20     ;set for falling edge detection
+    ;-----------------------------------------------------------
+lh2: IN    R21, TIFR1
+    SBRS  R21, ICF1
+    RJMP  lh2              ;loop until falling edge is detected
+    ;-----------------------------------------------------------
+    LDS   R28, ICR1L      ;store count value at falling edge
+    ;-----------------------------------------------------------
+    SUB   R28, R16        ;count diff R22 = R22 - R16
+    OUT   TIFR1, R21      ;clear flag for next sensor reading
+    RET
+;===============================================================
+;MAX7219 subroutines
+;===============================================================
+byte2decimal:
+;------------
+      CLR   R26             ;set counter1, initial value 0
+      CLR   R27             ;set counter2, initial value 0
+      ;--------------------------------------------------------
+lh70:  CPI   R28, 100        ;compare R28 with 100
+RetH:  BRMI  lh80             ;jump when R28 < 100
+      INC   R26             ;increment counter1 by 1
+      SUBI  R28, 100        ;R28 = R28 - 100
+      RJMP  lh70
+      ;--------------------------------------------------------
+lh80:  CPI   R28, 10         ;compare R28 with 10
+      BRMI  dspH             ;jump when R28 < 10
+      INC   R27             ;increment counter2 by 1
+      SUBI  R28, 10         ;R28 = R28 - 10
+      RJMP  lh80
+      ;--------------------------------------------------------  
+dspH:  
+;----------Condition
+    CPI R27, 3
+    BRSH matiin_led   ;Jika jarak lebih dari 30 cm, branch ke no
+    CPI R27, 3
+    BRLO nyala_led ;Jika jarak kurang dari 10 cm, branch ke almost
+    continueH:
+    RET
+
