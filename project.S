@@ -1,53 +1,50 @@
 ;------------------------
-; Assembly Code
+; Automatic Fan Kelompok B8
 ;------------------------
 #define __SFR_OFFSET 0x00
 #include "avr/io.h"
 ;------------------------
-; .global SPI_MAX7219_init
-; .global MAX7219_disp_text
-; .global DHT11_sensor
 .global main
 ;=================================================================
 
 main:
 RCALL initialize_motor
-
-loop:
 RCALL SPI_MAX7219_init
 RCALL MAX7219_disp_text
-; RCALL servo_motor
+loop:
 RCALL DHT11_sensor
-;RCALL servo_motor
 RCALL HC_SR04_sensor
 
 RJMP loop
 
-first_condition: ;JIka Dingin banget
+first_condition: ;Jika kondisi sekitar dingin
 CBI PORTD, 5
 CBI PORTD, 6
 RCALL turn_off_motor
 SBI PORTD, 4
-
 RJMP continue 
 
-second_condition: ; Jika Kondisi Cuaca Normal
-CBI PORTD, 6 ; Mematikan LED
-SBI PORTD, 5 ;Menyalakan LED
+second_condition: ; Jika kondisi sekitar normal
+CBI PORTD, 6 
+SBI PORTD, 5 
 CBI PORTD, 4
 RCALL turn_off_motor
 RJMP continue 
 
-third_condition: ;Jika panas banget
+third_condition: ; Jika kondisi sekitar panas
 SBI PORTD, 6
 CBI PORTD, 5
-; RCALL servo_motor
 RCALL turn_on_motor
 CBI PORTD, 4
 RJMP continue 
+
+;================================================================
+;DHT11 to MAX7219 Code
+;================================================================
+
 DHT11_sensor:
 ;-----------------------------------------------------------------
-agn:RCALL delay_2s      ;wait 2s for DHT11 to get ready
+    RCALL delay_2s      ;wait 2s for DHT11 to get ready
 ;-----------------------------------------------------------------
 ;start_signal
 ;------------
@@ -55,16 +52,13 @@ agn:RCALL delay_2s      ;wait 2s for DHT11 to get ready
     SBI DDRD, 4
     SBI DDRD, 5
     SBI DDRD, 6 
-
     ;Initialize Servo
     SBI DDRB, 4
-    ;==
-    
+    ;
     SBI   DDRD, 7       ;pin PD7 as o/p
     CBI   PORTD, 7      ;first, send low pulse
     RCALL delay_20ms    ;for 20ms
     SBI   PORTD, 7      ;then send high pulse
-
 ;-----------------------------------------------------------------
 ;responce signal
 ;---------------
@@ -81,25 +75,15 @@ w3: SBIC  PIND, 7
     RCALL DHT11_reading
     RCALL DHT11_reading ;read temp (3rd byte of 40-bit data)
 
-    ;Nilai Temperature disimpan pada R18 dan akan di cek dibagi menjadi tiga kondisi
-    ; CPI R24, 30
-    ; BRSH first_condition ;Branch if same or higher
-    ; CPI R24, 0
-    ; BREQ second_condition; Branch if equal 
-    ; CPI R24, 20
-    ; BRLO third_condition; Branch if lower
-
-    ;Branch Proteus
-    CPI R24, 30 ; Kondisi Cuaca Panas ; IF > = 30
+    ;Pengkondisian
+    CPI R24, 30 ; Kondisi Cuaca Panas ; IF >= 30
     BRSH third_condition
-    ; CPI R24, 25 ; Kondisi Cuaca Normal ; IF >= 25
-    ; BRSH second_condition
-    CPI R24, 20
+    CPI R24, 20 ;Kondisi Cuaca Normal : IF >= 20 and < 30 
     BRSH second_condition
     CPI R24, 20 ; Kondisi Cuaca Dingin : IF < 20
     BRLO first_condition
     continue:
-    ; RET
+
 ;-----------------------------------------------------------------
 ;convert temp & humidity bytes to decimal & display on MAX7219
 ;-------------------------------------------------------------
@@ -115,9 +99,9 @@ w3: SBIC  PIND, 7
     ;-------------------
     RCALL binary2decimal  ;humidity in decimal
     ;-------------------
-    ; RJMP  agn           ;go back & get another sensor reading
-    RET
+    RET                   ;go back & get another sensor reading
 ;=================================================================
+
 DHT11_reading:
     LDI   R16, 8        ;set counter for receiving 8 bits
     CLR   R24           ;clear data register
@@ -139,52 +123,7 @@ w5: SBIC  PIND, 7
     DEC   R16           ;decrement counter
     BRNE  w4            ;go back & detect next bit
     RET                 ;return to calling subroutine
-;=================================================================
-;delay subroutines
-;=================================================================
-delay_20ms:             ;delay 20ms
-    LDI   R21, 255
-l3: LDI   R22, 210
-l4: LDI   R23, 2
-l5: DEC   R23
-    BRNE  l5
-    DEC   R22
-    BRNE  l4
-    DEC   R21
-    BRNE  l3
-    RET
-;-----------------------------------------------------------------
-delay_2s:               ;delay 2s
-    LDI   R21, 255
-l6: LDI   R22, 255
-l7: LDI   R23, 164
-l8: DEC   R23
-    BRNE  l8
-    DEC   R22
-    BRNE  l7
-    DEC   R21
-    BRNE  l6
-    RET
-;===============================================================
-delay_timer0:             ;50 usec delay via Timer 0
-    ;---------------------------------------------------------
-    CLR   R20
-    OUT   TCNT0, R20      ;initialize timer0 with count=0
-    LDI   R20, 100
-    OUT   OCR0A, R20      ;OCR0 = 100
-    LDI   R20, 0b00001010
-    OUT   TCCR0B, R20     ;timer0: CTC mode, prescaler 64
-    ;---------------------------------------------------------
-l2: IN    R20, TIFR0      ;get TIFR0 byte & check
-    SBRS  R20, OCF0A      ;if OCF0=1, skip next instruction
-    RJMP  l2              ;else, loop back & check OCF0 flag
-    ;---------------------------------------------------------
-    CLR   R20
-    OUT   TCCR0B, R20     ;stop timer0
-    ;---------------------------------------------------------
-    LDI   R20, (1<<OCF0A)
-    OUT   TIFR0, R20      ;clear OCF0 flag
-    RET
+
 ;===============================================================
 ;MAX7219 subroutines
 ;===============================================================
@@ -287,6 +226,7 @@ dsp:  MOV   R18, R27
 ;===============================================================
 servo_motor:
 ;-----------
+    ;Inisialisasi Servo
     ; SBI   DDRB, 4         ;pin PB4 o/p for servo control
     ; SBI   DDRB, 0         ;PB0 o/p, red LED: pos 0 deg
     ; SBI   DDRB, 1         ;PB1 o/p, green LED: pos 90 deg
@@ -317,88 +257,13 @@ ls2: SBI   PORTB, 4
     RCALL delay_20ms_servo      ;wait 20ms before re-sending pulse
     DEC   R20
     BRNE  ls2              ;go back & repeat PWM signal
-    ;-----------------------------------------------------------
-    ; CPI   R27, 1
-    ; BREQ  red_LED         ;if pos 0 deg, turn ON red LED
-    ; CPI   R27, 3
-    ; BREQ  green_LED       ;if pos 90 deg, turn ON green LED
-    ; CPI   R27, 5
-    ; BREQ  blue_LED        ;if pos 180 deg, turn ON blue LED
-    ; CPI   R27, 7
-    ; BREQ  green_LED       ;if pos 90 deg, turn ON green LED
+
 bak:RCALL delay_ms        ;0.5s delay
     CBI   PORTB, 0
     CBI   PORTB, 1
-    ; CBI   PORTB, 2        ;turn OFF all LEDs
     INC   R27
     RET                   ;& return to main subroutine
-;-------------------
-; red_LED:                  ;subroutine to turn ON red LED
-;     SBI   PORTB, 0
-;     CBI   PORTB, 1
-;     ; CBI   PORTB, 2
-;     RJMP  bak
-; ;------------------
-; green_LED:                ;subroutine to turn ON green LED
-;     CBI   PORTB, 0
-;     SBI   PORTB, 1
-;     ; CBI   PORTB, 2
-;     RJMP  bak
-; ;------------------
-; blue_LED:                 ;subroutine to turn ON blue LED
-;     CBI   PORTB, 0
-;     CBI   PORTB, 1
-;     ; SBI   PORTB, 2
-;     RJMP  bak
-;===============================================================
-;delay subroutines
-;===============================================================
-delay_timer0Servo:             ;delay via Timer0
-    ;-----------------------------------------------------------
-    CLR   R21
-    OUT   TCNT0, R21      ;initialize timer0 with count=0
-    MOV   R21, R16
-    OUT   OCR0A, R21
-    LDI   R21, 0b00001100
-    OUT   TCCR0B, R21     ;timer0: CTC mode, prescaler 256
-    ;-----------------------------------------------------------
-ls3: IN    R21, TIFR0      ;get TIFR0 byte & check
-    SBRS  R21, OCF0A      ;if OCF0=1, skip next instruction
-    RJMP  ls3              ;else, loop back & check OCF0 flag
-    ;-----------------------------------------------------------
-    CLR   R21
-    OUT   TCCR0B, R21     ;stop timer0
-    ;-----------------------------------------------------------
-    LDI   R21, (1<<OCF0A)
-    OUT   TIFR0, R21      ;clear OCF0 flag
-    RET
-;===============================================================
 
-;===============================================================
-delay_ms:                 ;delay 0.5s
-    LDI   R21, 255
-ls7 :LDI   R22, 255
-ls8 :LDI   R23, 41
-l9 :DEC   R23
-    BRNE  l9
-    DEC   R22
-    BRNE  ls8
-    DEC   R21
-    BRNE  ls7
-    RET
-
-;===============================================================
-delay_20ms_servo:               ;delay 20ms
-    LDI   R21, 255
-ls4: LDI   R22, 210
-ls5: LDI   R23, 2
-ls6: DEC   R23
-    BRNE  ls6
-    DEC   R22
-    BRNE  ls5
-    DEC   R21
-    BRNE  ls4
-    RET
 
 ;===============================================================
 ;Motor Code
@@ -419,20 +284,6 @@ turn_off_motor:
 ;================================================================
 ;HCSR04 Code
 ;================================================================
-;===============================================================
-;Kode nyalain LED
-;Kondisi Jika jarak kurang dari 20cm
-nyala_led:
-SBIC PORTD, 4
-RCALL turn_off_motor
-RJMP continueH
-RJMP continueH
-
-;kode matiin LED
-matiin_led:
-RCALL turn_off_motor
-RJMP continueH
-
 HC_SR04_sensor:
 ;--------------
     SBI DDRD, 4
@@ -479,7 +330,7 @@ lh2: IN    R21, TIFR1
     OUT   TIFR1, R21      ;clear flag for next sensor reading
     RET
 ;===============================================================
-;MAX7219 subroutines
+;Subroutines to read data from sensor
 ;===============================================================
 byte2decimal:
 ;------------
@@ -499,11 +350,117 @@ lh80:  CPI   R28, 10         ;compare R28 with 10
       RJMP  lh80
       ;--------------------------------------------------------  
 dspH:  
-;----------Condition
+    ;Condition
     CPI R27, 3
-    BRSH matiin_led   ;Jika jarak lebih dari 30 cm, branch ke no
+    BRSH matiin_led   ;Jika jarak lebih dari 30 cm
     CPI R27, 3
-    BRLO nyala_led ;Jika jarak kurang dari 10 cm, branch ke almost
+    BRLO nyala_led ;Jika jarak kurang dari 30 cm
     continueH:
     RET
 
+;Kode firstMotorCondition
+;Kondisi Jika jarak kurang dari 30cm
+nyala_led:
+SBIC PORTD, 4 ; Akan mengecek terlebih dahulu dari program sebelumnya apakah suhu lebih dari 30derajat
+RCALL turn_off_motor ; 
+RJMP continueH
+RJMP continueH
+
+;Kode secondMotorCondition
+;Kondisi ketika jarak lebih dari 30cm akan otomatis mematikan motor
+matiin_led:
+RCALL turn_off_motor
+RJMP continueH
+;=================================================================
+;delay subroutines
+;=================================================================
+delay_20ms:             ;delay 20ms
+    LDI   R21, 255
+l3: LDI   R22, 210
+l4: LDI   R23, 2
+l5: DEC   R23
+    BRNE  l5
+    DEC   R22
+    BRNE  l4
+    DEC   R21
+    BRNE  l3
+    RET
+;-----------------------------------------------------------------
+delay_2s:               ;delay 2s
+    LDI   R21, 255
+l6: LDI   R22, 255
+l7: LDI   R23, 164
+l8: DEC   R23
+    BRNE  l8
+    DEC   R22
+    BRNE  l7
+    DEC   R21
+    BRNE  l6
+    RET
+;===============================================================
+delay_timer0:             ;50 usec delay via Timer 0
+    ;---------------------------------------------------------
+    CLR   R20
+    OUT   TCNT0, R20      ;initialize timer0 with count=0
+    LDI   R20, 100
+    OUT   OCR0A, R20      ;OCR0 = 100
+    LDI   R20, 0b00001010
+    OUT   TCCR0B, R20     ;timer0: CTC mode, prescaler 64
+    ;---------------------------------------------------------
+l2: IN    R20, TIFR0      ;get TIFR0 byte & check
+    SBRS  R20, OCF0A      ;if OCF0=1, skip next instruction
+    RJMP  l2              ;else, loop back & check OCF0 flag
+    ;---------------------------------------------------------
+    CLR   R20
+    OUT   TCCR0B, R20     ;stop timer0
+    ;---------------------------------------------------------
+    LDI   R20, (1<<OCF0A)
+    OUT   TIFR0, R20      ;clear OCF0 flag
+    RET
+
+delay_timer0Servo:             ;delay via Timer0
+    ;-----------------------------------------------------------
+    CLR   R21
+    OUT   TCNT0, R21      ;initialize timer0 with count=0
+    MOV   R21, R16
+    OUT   OCR0A, R21
+    LDI   R21, 0b00001100
+    OUT   TCCR0B, R21     ;timer0: CTC mode, prescaler 256
+    ;-----------------------------------------------------------
+ls3: IN    R21, TIFR0      ;get TIFR0 byte & check
+    SBRS  R21, OCF0A      ;if OCF0=1, skip next instruction
+    RJMP  ls3              ;else, loop back & check OCF0 flag
+    ;-----------------------------------------------------------
+    CLR   R21
+    OUT   TCCR0B, R21     ;stop timer0
+    ;-----------------------------------------------------------
+    LDI   R21, (1<<OCF0A)
+    OUT   TIFR0, R21      ;clear OCF0 flag
+    RET
+;===============================================================
+
+;===============================================================
+delay_ms:                 ;delay 0.5s
+    LDI   R21, 255
+ls7 :LDI   R22, 255
+ls8 :LDI   R23, 41
+l9 :DEC   R23
+    BRNE  l9
+    DEC   R22
+    BRNE  ls8
+    DEC   R21
+    BRNE  ls7
+    RET
+
+;===============================================================
+delay_20ms_servo:               ;delay 20ms
+    LDI   R21, 255
+ls4: LDI   R22, 210
+ls5: LDI   R23, 2
+ls6: DEC   R23
+    BRNE  ls6
+    DEC   R22
+    BRNE  ls5
+    DEC   R21
+    BRNE  ls4
+    RET
